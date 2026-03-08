@@ -28,8 +28,11 @@ const firebaseConfig = window.__FIREBASE_CONFIG__ || {
   appId: "YOUR_FIREBASE_APP_ID",
 };
 
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
+function hasPlaceholderFirebaseConfig(config) {
+  const values = [config?.apiKey, config?.authDomain, config?.projectId, config?.appId]
+    .map((value) => String(value || ""));
+  return values.some((value) => value.includes("YOUR_"));
+}
 
 const categoryLabels = {
   guilt: "Guilt / Regret",
@@ -59,6 +62,7 @@ let lastVisibleDoc = null;
 let hasMoreFromServer = true;
 let isFetchingNextPage = false;
 let realtimeUnsubscribe = null;
+let firestoreDb = null;
 
 function setPaymentStatus(message) {
   if (!paymentStatus) {
@@ -172,7 +176,7 @@ function mapSecretDoc(doc) {
   };
 }
 
-async function fetchNextSecretsPage() {
+async function fetchNextSecretsPage(db) {
   if (!hasMoreFromServer || isFetchingNextPage) {
     return;
   }
@@ -217,7 +221,7 @@ async function fetchNextSecretsPage() {
   }
 }
 
-function listenToLatestSecretsRealtime() {
+function listenToLatestSecretsRealtime(db) {
   if (realtimeUnsubscribe) {
     realtimeUnsubscribe();
   }
@@ -247,8 +251,19 @@ function listenToLatestSecretsRealtime() {
 }
 
 async function initializeSecretsFeed() {
+  if (hasPlaceholderFirebaseConfig(firebaseConfig)) {
+    setPaymentStatus("Firebase is not configured. Add real Firebase web config in index.html.");
+    scarcityCounter.textContent = formatRemainingCount(0);
+    showFallbackMessage("Feed is offline: Firebase config placeholders are still set.");
+    return;
+  }
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+  firestoreDb = db;
+
   try {
-    await fetchNextSecretsPage();
+    await fetchNextSecretsPage(db);
     if (allSecrets.length === 0) {
       scarcityCounter.textContent = formatRemainingCount(0);
       showFallbackMessage("No secrets have been posted yet.");
@@ -256,7 +271,7 @@ async function initializeSecretsFeed() {
     }
 
     rerenderFromTop();
-    listenToLatestSecretsRealtime();
+    listenToLatestSecretsRealtime(db);
   } catch (error) {
     scarcityCounter.textContent = formatRemainingCount(0);
     showFallbackMessage("Unable to load secrets right now. Try refreshing in a moment.");
@@ -274,6 +289,9 @@ function closeModal() {
 openModalBtn.addEventListener("click", openModal);
 closeModalBtn.addEventListener("click", closeModal);
 loadMoreBtn.addEventListener("click", async () => {
+  if (!firestoreDb) {
+    return;
+  }
   if (renderedCount < allSecrets.length) {
     renderNextBatch();
     return;
@@ -285,7 +303,7 @@ loadMoreBtn.addEventListener("click", async () => {
   }
 
   const previousCount = allSecrets.length;
-  await fetchNextSecretsPage();
+  await fetchNextSecretsPage(firestoreDb);
   if (allSecrets.length > previousCount) {
     renderNextBatch();
     return;
