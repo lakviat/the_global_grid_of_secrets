@@ -2,10 +2,12 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/fireba
 import {
   collection,
   getFirestore,
+  getDocs,
   limit,
   onSnapshot,
   orderBy,
   query,
+  startAfter,
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
 const MAX_SECRETS = 100000;
@@ -16,6 +18,8 @@ const BATCH_SIZE_MOBILE = 24;
 const MAX_SECRET_LENGTH = 200;
 const MAX_AUTHOR_LENGTH = 40;
 const STRIPE_REFERENCE_MAX_LENGTH = 200;
+const FIRESTORE_PAGE_SIZE = 120;
+const FIRESTORE_REALTIME_HEAD_SIZE = 40;
 
 const firebaseConfig = window.__FIREBASE_CONFIG__ || {
   apiKey: "YOUR_FIREBASE_API_KEY",
@@ -51,6 +55,10 @@ const paymentStatus = document.getElementById("paymentStatus");
 
 let allSecrets = [];
 let renderedCount = 0;
+let lastVisibleDoc = null;
+let hasMoreFromServer = true;
+let isFetchingNextPage = false;
+let realtimeUnsubscribe = null;
 
 function setPaymentStatus(message) {
   if (!paymentStatus) {
@@ -94,7 +102,7 @@ function getBatchSize() {
 function updateFeedControls() {
   const total = allSecrets.length;
   feedStatus.textContent = `Showing ${renderedCount.toLocaleString()} of ${total.toLocaleString()} secrets`;
-  if (renderedCount < total) {
+  if (renderedCount < total || hasMoreFromServer) {
     loadMoreBtn.classList.remove("hidden");
     return;
   }
@@ -119,7 +127,11 @@ function rerenderFromTop() {
   renderedCount = 0;
   secretsGrid.innerHTML = "";
   scarcityCounter.textContent = formatRemainingCount(allSecrets.length);
-  renderNextBatch();
+  if (allSecrets.length > 0) {
+    renderNextBatch();
+    return;
+  }
+  updateFeedControls();
 }
 
 function showFallbackMessage(message) {
@@ -150,32 +162,105 @@ function handlePaymentReturn() {
   window.history.replaceState({}, "", cleanUrl);
 }
 
-function listenToSecretsRealtime() {
-  const secretsQuery = query(
+function mapSecretDoc(doc) {
+  const data = doc.data() || {};
+  return {
+    id: doc.id,
+    text: data.text || "",
+    author: data.author || "Anonymous",
+    category: normalizeCategory((data.category || "general").toLowerCase()),
+  };
+}
+
+async function fetchNextSecretsPage() {
+  if (!hasMoreFromServer || isFetchingNextPage) {
+    return;
+  }
+
+  isFetchingNextPage = true;
+  try {
+    let nextQuery = query(
+      collection(db, "secrets"),
+      orderBy("createdAt", "desc"),
+      limit(FIRESTORE_PAGE_SIZE)
+    );
+
+    if (lastVisibleDoc) {
+      nextQuery = query(
+        collection(db, "secrets"),
+        orderBy("createdAt", "desc"),
+        startAfter(lastVisibleDoc),
+        limit(FIRESTORE_PAGE_SIZE)
+      );
+    }
+
+    const snapshot = await getDocs(nextQuery);
+    if (snapshot.empty) {
+      hasMoreFromServer = false;
+      updateFeedControls();
+      return;
+    }
+
+    lastVisibleDoc = snapshot.docs[snapshot.docs.length - 1];
+    const existingIds = new Set(allSecrets.map((secret) => secret.id));
+    const newSecrets = snapshot.docs
+      .map(mapSecretDoc)
+      .filter((secret) => !existingIds.has(secret.id));
+
+    allSecrets = [...allSecrets, ...newSecrets];
+    if (snapshot.docs.length < FIRESTORE_PAGE_SIZE) {
+      hasMoreFromServer = false;
+    }
+    scarcityCounter.textContent = formatRemainingCount(allSecrets.length);
+  } finally {
+    isFetchingNextPage = false;
+  }
+}
+
+function listenToLatestSecretsRealtime() {
+  if (realtimeUnsubscribe) {
+    realtimeUnsubscribe();
+  }
+
+  const realtimeQuery = query(
     collection(db, "secrets"),
     orderBy("createdAt", "desc"),
-    limit(MAX_SECRETS)
+    limit(FIRESTORE_REALTIME_HEAD_SIZE)
   );
 
-  onSnapshot(
-    secretsQuery,
+  realtimeUnsubscribe = onSnapshot(
+    realtimeQuery,
     (snapshot) => {
-      allSecrets = snapshot.docs.map((doc) => {
-        const data = doc.data() || {};
-        return {
-          id: doc.id,
-          text: data.text || "",
-          author: data.author || "Anonymous",
-          category: normalizeCategory((data.category || "general").toLowerCase()),
-        };
-      });
+      const latestSecrets = snapshot.docs.map(mapSecretDoc);
+      const latestIds = new Set(latestSecrets.map((secret) => secret.id));
+      const olderSecrets = allSecrets.filter((secret) => !latestIds.has(secret.id));
+      allSecrets = [...latestSecrets, ...olderSecrets];
       rerenderFromTop();
     },
     () => {
-      scarcityCounter.textContent = formatRemainingCount(0);
-      showFallbackMessage("Unable to load secrets right now. Try refreshing in a moment.");
+      if (allSecrets.length === 0) {
+        scarcityCounter.textContent = formatRemainingCount(0);
+        showFallbackMessage("Unable to load secrets right now. Try refreshing in a moment.");
+      }
     }
   );
+}
+
+async function initializeSecretsFeed() {
+  try {
+    await fetchNextSecretsPage();
+    if (allSecrets.length === 0) {
+      scarcityCounter.textContent = formatRemainingCount(0);
+      showFallbackMessage("No secrets have been posted yet.");
+      return;
+    }
+
+    rerenderFromTop();
+    listenToLatestSecretsRealtime();
+  } catch (error) {
+    scarcityCounter.textContent = formatRemainingCount(0);
+    showFallbackMessage("Unable to load secrets right now. Try refreshing in a moment.");
+  }
 }
 
 function openModal() {
@@ -188,7 +273,25 @@ function closeModal() {
 
 openModalBtn.addEventListener("click", openModal);
 closeModalBtn.addEventListener("click", closeModal);
-loadMoreBtn.addEventListener("click", renderNextBatch);
+loadMoreBtn.addEventListener("click", async () => {
+  if (renderedCount < allSecrets.length) {
+    renderNextBatch();
+    return;
+  }
+
+  if (!hasMoreFromServer) {
+    updateFeedControls();
+    return;
+  }
+
+  const previousCount = allSecrets.length;
+  await fetchNextSecretsPage();
+  if (allSecrets.length > previousCount) {
+    renderNextBatch();
+    return;
+  }
+  updateFeedControls();
+});
 
 modal.addEventListener("click", (event) => {
   if (event.target === modal) {
@@ -227,4 +330,4 @@ secretForm.addEventListener("submit", (event) => {
 });
 
 handlePaymentReturn();
-listenToSecretsRealtime();
+initializeSecretsFeed();
