@@ -26,6 +26,10 @@ jobs:
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
+        with:
+          # Use a PAT (secret: PAGES_ACCESS_TOKEN) when repo token cannot create/read Pages site.
+          token: ${{ secrets.PAGES_ACCESS_TOKEN != '' && secrets.PAGES_ACCESS_TOKEN || github.token }}
+          enablement: true
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
