@@ -1,10 +1,31 @@
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+import {
+  collection,
+  getFirestore,
+  limit,
+  onSnapshot,
+  orderBy,
+  query,
+} from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+
 const MAX_SECRETS = 100000;
 const STRIPE_PLACEHOLDER_URL = "https://buy.stripe.com/eVqaEZ4FE4SH4pF8KE0Ny00";
 const MOBILE_BREAKPOINT = 560;
 const BATCH_SIZE_DESKTOP = 48;
 const BATCH_SIZE_MOBILE = 24;
-const MAX_SECRET_LENGTH = 300;
+const MAX_SECRET_LENGTH = 200;
 const MAX_AUTHOR_LENGTH = 40;
+const STRIPE_REFERENCE_MAX_LENGTH = 200;
+
+const firebaseConfig = window.__FIREBASE_CONFIG__ || {
+  apiKey: "YOUR_FIREBASE_API_KEY",
+  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+  projectId: "YOUR_PROJECT_ID",
+  appId: "YOUR_FIREBASE_APP_ID",
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
 
 const categoryLabels = {
   guilt: "Guilt / Regret",
@@ -30,7 +51,6 @@ const paymentStatus = document.getElementById("paymentStatus");
 
 let allSecrets = [];
 let renderedCount = 0;
-let pendingSecretDraft = null;
 
 function setPaymentStatus(message) {
   if (!paymentStatus) {
@@ -95,6 +115,13 @@ function renderNextBatch() {
   updateFeedControls();
 }
 
+function rerenderFromTop() {
+  renderedCount = 0;
+  secretsGrid.innerHTML = "";
+  scarcityCounter.textContent = formatRemainingCount(allSecrets.length);
+  renderNextBatch();
+}
+
 function showFallbackMessage(message) {
   secretsGrid.innerHTML = "";
   const fallback = document.createElement("article");
@@ -102,14 +129,8 @@ function showFallbackMessage(message) {
   fallback.dataset.category = "general";
   fallback.innerHTML = `<p class="secret-card__text">${message}</p>`;
   secretsGrid.appendChild(fallback);
-}
-
-function prependSecretAndRerender(secret) {
-  allSecrets = [secret, ...allSecrets];
-  renderedCount = 0;
-  secretsGrid.innerHTML = "";
-  scarcityCounter.textContent = formatRemainingCount(allSecrets.length);
-  renderNextBatch();
+  feedStatus.textContent = "";
+  loadMoreBtn.classList.add("hidden");
 }
 
 function handlePaymentReturn() {
@@ -119,12 +140,8 @@ function handlePaymentReturn() {
     return;
   }
 
-  if (status === "success" && pendingSecretDraft) {
-    prependSecretAndRerender(pendingSecretDraft);
-    pendingSecretDraft = null;
-    setPaymentStatus("Payment confirmed. Your secret is now posted.");
-  } else if (status === "success") {
-    setPaymentStatus("Payment confirmed.");
+  if (status === "success") {
+    setPaymentStatus("Payment confirmed. Your secret will appear once Stripe webhook processes it.");
   } else if (status === "cancel") {
     setPaymentStatus("Payment canceled.");
   }
@@ -133,27 +150,32 @@ function handlePaymentReturn() {
   window.history.replaceState({}, "", cleanUrl);
 }
 
-async function loadSecrets() {
-  try {
-    const response = await fetch("./data.json", { cache: "no-store" });
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
+function listenToSecretsRealtime() {
+  const secretsQuery = query(
+    collection(db, "secrets"),
+    orderBy("createdAt", "desc"),
+    limit(MAX_SECRETS)
+  );
 
-    const data = await response.json();
-    const apiSecrets = Array.isArray(data?.secrets) ? data.secrets : [];
-    allSecrets = apiSecrets;
-    renderedCount = 0;
-    secretsGrid.innerHTML = "";
-    scarcityCounter.textContent = formatRemainingCount(allSecrets.length);
-    renderNextBatch();
-    handlePaymentReturn();
-  } catch (error) {
-    scarcityCounter.textContent = formatRemainingCount(0);
-    showFallbackMessage("Unable to load secrets right now. Try refreshing in a moment.");
-    feedStatus.textContent = "";
-    loadMoreBtn.classList.add("hidden");
-  }
+  onSnapshot(
+    secretsQuery,
+    (snapshot) => {
+      allSecrets = snapshot.docs.map((doc) => {
+        const data = doc.data() || {};
+        return {
+          id: doc.id,
+          text: data.text || "",
+          author: data.author || "Anonymous",
+          category: normalizeCategory((data.category || "general").toLowerCase()),
+        };
+      });
+      rerenderFromTop();
+    },
+    () => {
+      scarcityCounter.textContent = formatRemainingCount(0);
+      showFallbackMessage("Unable to load secrets right now. Try refreshing in a moment.");
+    }
+  );
 }
 
 function openModal() {
@@ -195,28 +217,14 @@ secretForm.addEventListener("submit", (event) => {
   }
 
   const author = (authorAlias?.value || "").trim().slice(0, MAX_AUTHOR_LENGTH) || "Anonymous";
-  const categoryInput = secretForm.querySelector('input[name="category"]:checked');
-  const category = normalizeCategory(categoryInput?.value || "general");
-  const secret = {
-    id: Date.now(),
-    text,
-    author,
-    category,
-  };
-
-  pendingSecretDraft = secret;
+  const rawReference = `Secret: ${text} | By: ${author}`;
+  const encodedReference = encodeURIComponent(rawReference).substring(0, STRIPE_REFERENCE_MAX_LENGTH);
 
   const checkoutUrl = new URL(STRIPE_PLACEHOLDER_URL);
-  // Keep this compact for Stripe reference matching, while still unique per attempt.
-  checkoutUrl.searchParams.set("client_reference_id", `${secret.id}-${category}`);
-  // Extra context passed via URL params for owner-side review/publishing workflow.
-  checkoutUrl.searchParams.set("secret_text", text);
-  checkoutUrl.searchParams.set("author_name", author);
-  checkoutUrl.searchParams.set("category", category);
+  checkoutUrl.searchParams.set("client_reference_id", encodedReference);
 
-  closeModal();
-  setPaymentStatus("Stripe opened in a new tab. After payment, return here to see confirmation.");
-  window.open(checkoutUrl.toString(), "_blank", "noopener,noreferrer");
+  window.location.href = checkoutUrl.toString();
 });
 
-loadSecrets();
+handlePaymentReturn();
+listenToSecretsRealtime();
