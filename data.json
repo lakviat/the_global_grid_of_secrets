@@ -1,0 +1,76 @@
+{
+  "secrets": [
+    {
+      "id": 1,
+      "text": "I still replay one argument from 2018 and wish I had apologized sooner.",
+      "author": "Anonymous",
+      "category": "guilt"
+    },
+    {
+      "id": 2,
+      "text": "I laugh at work all day and then sit in my car for ten extra minutes before driving home because I don't want to be alone yet.",
+      "author": "Anonymous",
+      "category": "sadness"
+    },
+    {
+      "id": 3,
+      "text": "I paid off my mom's utility bill without telling her and she called it a miracle.",
+      "author": "quiethelper",
+      "category": "joy"
+    },
+    {
+      "id": 4,
+      "text": "I keep a note in my phone of things I never say out loud.",
+      "author": "Anonymous",
+      "category": "general"
+    },
+    {
+      "id": 5,
+      "text": "I told my brother I'd visit more often, but I keep postponing because I don't know how to talk to him after everything.",
+      "author": "Anonymous",
+      "category": "guilt"
+    },
+    {
+      "id": 6,
+      "text": "I moved to a city full of people and somehow feel lonelier than I did in my hometown.",
+      "author": "N",
+      "category": "sadness"
+    },
+    {
+      "id": 7,
+      "text": "I started leaving handwritten encouragement notes in library books and found one of mine posted online by a stranger who needed it.",
+      "author": "papertrail",
+      "category": "joy"
+    },
+    {
+      "id": 8,
+      "text": "I keep wondering if everyone else is also pretending to know what they're doing.",
+      "author": "Anonymous",
+      "category": "general"
+    },
+    {
+      "id": 9,
+      "text": "I avoided a friend for months because I was ashamed to admit I needed help.",
+      "author": "A.",
+      "category": "guilt"
+    },
+    {
+      "id": 10,
+      "text": "I smile in every group photo lately, but I've been struggling to sleep most nights.",
+      "author": "Anonymous",
+      "category": "sadness"
+    },
+    {
+      "id": 11,
+      "text": "I paid for the coffee of the person behind me, and now I do it every Friday because it reminds me the world can still be kind.",
+      "author": "Anonymous",
+      "category": "joy"
+    },
+    {
+      "id": 12,
+      "text": "I wrote down my five-year plan and realized I was chasing someone else's definition of success.",
+      "author": "Anonymous",
+      "category": "general"
+    }
+  ]
+}

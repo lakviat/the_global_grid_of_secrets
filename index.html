@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Lock Your Secret | The Global Digital Confessional</title>
+    <meta
+      name="description"
+      content="Read anonymous secrets for free. Pay $1.99 to lock your confession onto the permanent global grid. The wall freezes forever at 100,000 entries."
+    />
+    <meta
+      name="keywords"
+      content="anonymous confessions, post a secret, read secrets online, digital confessional, lock your secret, secret wall, anonymous grid, confess a secret"
+    />
+    <meta property="og:title" content="Lock Your Secret | The Global Digital Confessional" />
+    <meta
+      property="og:description"
+      content="Read anonymous secrets for free. Pay $1.99 to lock your confession onto the permanent global grid. The wall freezes forever at 100,000 entries."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://lockyoursecret.com" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Literata:opsz,wght@7..72,400;7..72,500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="bg-noise" aria-hidden="true"></div>
+
+    <header class="topbar">
+      <div class="topbar__content">
+        <a class="brand" href="#" aria-label="The Global Grid of Secrets">
+          <span class="brand__dot"></span>
+          <span>The Global Grid of Secrets</span>
+        </a>
+
+        <div class="scarcity" id="scarcityCounter" aria-live="polite">
+          Loading secrets...
+        </div>
+
+        <button class="cta-btn" id="openModalBtn" type="button">
+          Confess Permanently ($1.99)
+        </button>
+      </div>
+    </header>
+
+    <main class="main">
+      <section class="intro">
+        <p class="intro__text">
+          100% free to read. $1.99 to carve a confession into the wall forever.
+        </p>
+        <div class="instruction-banner" aria-label="How it works">
+          <span class="instruction-banner__item">Read secrets for free.</span>
+          <span class="instruction-banner__item">Pay $1.99 to lock your secret on the wall permanently.</span>
+          <span class="instruction-banner__item">The wall freezes forever at 100,000 entries.</span>
+        </div>
+        <p class="payment-status hidden" id="paymentStatus" aria-live="polite"></p>
+      </section>
+
+      <section
+        class="masonry-grid"
+        id="secretsGrid"
+        aria-label="Secrets feed"
+      ></section>
+      <section class="feed-controls" aria-live="polite">
+        <p class="feed-status" id="feedStatus"></p>
+        <button class="load-more-btn hidden" id="loadMoreBtn" type="button">
+          Load More Secrets
+        </button>
+      </section>
+    </main>
+
+    <div
+      class="modal-backdrop hidden"
+      id="secretModal"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="modalTitle"
+    >
+      <div class="modal" role="document">
+        <button class="modal__close" id="closeModalBtn" aria-label="Close">
+          x
+        </button>
+
+        <h2 id="modalTitle">Lock In Your Secret ($1.99)</h2>
+
+        <form id="secretForm">
+          <label for="secretText">Your Secret (max 300 chars)</label>
+          <textarea
+            id="secretText"
+            name="secretText"
+            maxlength="300"
+            required
+            placeholder="Write your secret..."
+          ></textarea>
+          <div class="char-counter" id="charCounter">0 / 300</div>
+
+          <label for="authorAlias">Name / Alias (Optional)</label>
+          <input
+            type="text"
+            id="authorAlias"
+            name="authorAlias"
+            maxlength="40"
+            placeholder="Anonymous"
+          />
+          <p class="field-help">Leave blank to remain completely anonymous.</p>
+
+          <fieldset class="category-fieldset">
+            <legend>Emotional Category</legend>
+            <div class="category-options">
+              <label><input type="radio" name="category" value="guilt" checked /> Guilt</label>
+              <label><input type="radio" name="category" value="sadness" /> Sadness</label>
+              <label><input type="radio" name="category" value="joy" /> Joy</label>
+              <label><input type="radio" name="category" value="general" /> General</label>
+            </div>
+          </fieldset>
+
+          <button type="submit" class="pay-btn">Pay $1.99 &amp; Lock It In</button>
+        </form>
+      </div>
+    </div>
+
+    <template id="cardTemplate">
+      <article class="secret-card">
+        <p class="secret-card__text"></p>
+        <footer class="secret-card__meta">
+          <span class="secret-card__author"></span>
+          <span class="secret-card__category"></span>
+        </footer>
+      </article>
+    </template>
+
+    <script src="./script.js"></script>
+  </body>
+  </html>
