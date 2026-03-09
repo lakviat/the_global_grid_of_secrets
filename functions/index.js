@@ -11,11 +11,20 @@ const STRIPE_SECRET_KEY = defineSecret("STRIPE_SECRET_KEY");
 const STRIPE_WEBHOOK_SECRET = defineSecret("STRIPE_WEBHOOK_SECRET");
 
 function safeDecode(value) {
-  try {
-    return decodeURIComponent(value);
-  } catch (error) {
-    return value;
+  let decoded = String(value || "");
+  // Handle plain text, encoded, and double-encoded payloads from query params.
+  for (let idx = 0; idx < 2; idx += 1) {
+    try {
+      const next = decodeURIComponent(decoded);
+      if (next === decoded) {
+        break;
+      }
+      decoded = next;
+    } catch (error) {
+      break;
+    }
   }
+  return decoded;
 }
 
 function parseClientReferenceId(referenceId) {
@@ -91,10 +100,18 @@ exports.stripeWebhook = onRequest(
     const session = event.data.object;
     const sessionId = session.id;
     const clientReferenceId = session.client_reference_id || "";
+    logger.info("checkout.session.completed received", {
+      sessionId,
+      hasClientReferenceId: Boolean(clientReferenceId),
+      paymentStatus: session.payment_status || "unknown",
+    });
 
     const { text, author } = parseClientReferenceId(clientReferenceId);
     if (!text) {
-      logger.warn("Session missing secret text", { sessionId, clientReferenceId });
+      logger.warn("Session missing secret text", {
+        sessionId,
+        clientReferenceId,
+      });
       res.status(200).send("No secret text provided");
       return;
     }

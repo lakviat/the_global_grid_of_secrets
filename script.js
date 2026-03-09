@@ -338,11 +338,10 @@ secretForm.addEventListener("submit", (event) => {
   }
 
   const author = (authorAlias?.value || "").trim().slice(0, MAX_AUTHOR_LENGTH) || "Anonymous";
-  const rawReference = `Secret: ${text} | By: ${author}`;
-  const encodedReference = encodeURIComponent(rawReference).substring(0, STRIPE_REFERENCE_MAX_LENGTH);
+  const rawReference = `Secret: ${text} | By: ${author}`.slice(0, STRIPE_REFERENCE_MAX_LENGTH);
 
   const checkoutUrl = new URL(STRIPE_PLACEHOLDER_URL);
-  checkoutUrl.searchParams.set("client_reference_id", encodedReference);
+  checkoutUrl.searchParams.set("client_reference_id", rawReference);
 
   window.location.href = checkoutUrl.toString();
 });
