@@ -11,13 +11,11 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
 const MAX_SECRETS = 100000;
-const STRIPE_PLACEHOLDER_URL = "https://buy.stripe.com/eVqaEZ4FE4SH4pF8KE0Ny00";
 const MOBILE_BREAKPOINT = 560;
 const BATCH_SIZE_DESKTOP = 48;
 const BATCH_SIZE_MOBILE = 24;
 const MAX_SECRET_LENGTH = 200;
 const MAX_AUTHOR_LENGTH = 40;
-const STRIPE_REFERENCE_MAX_LENGTH = 200;
 const FIRESTORE_PAGE_SIZE = 120;
 const FIRESTORE_REALTIME_HEAD_SIZE = 40;
 
@@ -32,6 +30,10 @@ function hasPlaceholderFirebaseConfig(config) {
   const values = [config?.apiKey, config?.authDomain, config?.projectId, config?.appId]
     .map((value) => String(value || ""));
   return values.some((value) => value.includes("YOUR_"));
+}
+
+function getCreateCheckoutSessionUrl(projectId) {
+  return `https://us-central1-${projectId}.cloudfunctions.net/createCheckoutSession`;
 }
 
 const categoryLabels = {
@@ -330,7 +332,7 @@ secretText.addEventListener("input", () => {
   charCounter.textContent = `${secretText.value.length} / ${MAX_SECRET_LENGTH}`;
 });
 
-secretForm.addEventListener("submit", (event) => {
+secretForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const text = secretText.value.trim().slice(0, MAX_SECRET_LENGTH);
   if (!text) {
@@ -338,12 +340,48 @@ secretForm.addEventListener("submit", (event) => {
   }
 
   const author = (authorAlias?.value || "").trim().slice(0, MAX_AUTHOR_LENGTH) || "Anonymous";
-  const rawReference = `Secret: ${text} | By: ${author}`.slice(0, STRIPE_REFERENCE_MAX_LENGTH);
+  const selectedCategory = secretForm.querySelector('input[name="category"]:checked');
+  const category = normalizeCategory(selectedCategory?.value || "general");
+  const submitButton = secretForm.querySelector(".pay-btn");
 
-  const checkoutUrl = new URL(STRIPE_PLACEHOLDER_URL);
-  checkoutUrl.searchParams.set("client_reference_id", rawReference);
+  try {
+    if (submitButton) {
+      submitButton.disabled = true;
+      submitButton.textContent = "Opening checkout...";
+    }
 
-  window.location.href = checkoutUrl.toString();
+    setPaymentStatus("Preparing secure checkout...");
+    const response = await fetch(getCreateCheckoutSessionUrl(firebaseConfig.projectId), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        secretText: text,
+        author,
+        category,
+        siteUrl: window.location.origin,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Checkout session failed (${response.status})`);
+    }
+
+    const data = await response.json();
+    if (!data?.url) {
+      throw new Error("Checkout URL missing");
+    }
+
+    window.location.href = data.url;
+  } catch (error) {
+    setPaymentStatus("Unable to start Stripe checkout right now. Please try again.");
+  } finally {
+    if (submitButton) {
+      submitButton.disabled = false;
+      submitButton.textContent = "Pay $1.99 & Lock It In";
+    }
+  }
 });
 
 handlePaymentReturn();
